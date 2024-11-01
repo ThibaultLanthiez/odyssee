@@ -1,4 +1,4 @@
-SELECT *
+SELECT prix_vol
 FROM vol, aeroport, voyage
 WHERE 
     aeroport.id_ville = voyage.id_ville_destination 

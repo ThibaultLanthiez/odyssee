@@ -143,7 +143,7 @@ def thread_scraper(date_ranges):
         if data:
             # Obtenir ou créer les aéroports
             id_aeroport_depart = get_or_create_aeroport(conn, 'Charles de Gaulle', 'CDG', 'Paris')
-            id_aeroport_ory = get_or_create_aeroport(conn, 'Orly', 'ORY', 'Paris')
+            id_aeroport_orly = get_or_create_aeroport(conn, 'Orly', 'ORY', 'Paris')
             id_aeroport_destination = get_or_create_aeroport(conn, 'Amsterdam Schiphol', 'AMS', 'Amsterdam')
 
             # Insertion du vol
@@ -157,7 +157,7 @@ def thread_scraper(date_ranges):
 
 # Boucle sur chaque jour de janvier 2025 avec des intervalles de 7 jours
 start_date = datetime(2025, 1, 1)
-end_date = datetime(2025, 1, 31)
+end_date = datetime(2025, 6, 30)
 delta = timedelta(days=1)
 days_span = timedelta(days=7)
 
@@ -176,7 +176,7 @@ def split_date_ranges(date_ranges, num_splits):
     return [date_ranges[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(num_splits)]
 
 # Répartir les périodes à scraper pour chaque thread
-num_threads = 4  # Nombre de threads à utiliser
+num_threads = 3  # Nombre de threads à utiliser
 split_ranges = split_date_ranges(date_ranges, num_threads)
 
 # Utiliser ThreadPoolExecutor pour exécuter les appels de scraping en parallèle
@@ -189,9 +189,3 @@ with ThreadPoolExecutor(max_workers=num_threads) as executor:
         result = future.result()
         if result:
             all_data.extend(result)
-
-# Convertir les données en DataFrame et afficher
-df = pd.DataFrame(all_data)
-df['prix'] = pd.to_numeric(df['prix'], errors='coerce')
-df_sorted = df.sort_values(by='prix')
-print(df_sorted.head(10))
