@@ -6,27 +6,27 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import re
 from datetime import datetime, timedelta
-
-# Configurer le service pour ChromeDriver
-driver_path = 'chromedriver/130/chromedriver.exe'  # Remplacez par le chemin réel vers chromedriver.exe
-service = Service(driver_path)
+import sqlite3
 
 # Initialiser Selenium avec les options nécessaires
 def start_browser():
     options = webdriver.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')  # Ignorer les erreurs SSL
+    # Configurer le service pour ChromeDriver
+    driver_path = 'chromedriver/130/chromedriver.exe'  # Remplacez par le chemin réel vers chromedriver.exe
+    service = Service(driver_path)
     return webdriver.Chrome(service=service, options=options)
-
-# Démarrer le navigateur
-driver = start_browser()
 
 def accept_cookies(driver):
     try:
-        accept_cookies_button = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[class="RxNS RxNS-mod-stretch RxNS-mod-variant-outline RxNS-mod-theme-base RxNS-mod-shape-default RxNS-mod-spacing-base RxNS-mod-size-small"]'))
-        )
-        accept_cookies_button.click()
-        time.sleep(5)  # Laisser un peu de temps après l'acceptation des cookies
+        global is_cookies
+        if is_cookies:
+            accept_cookies_button = WebDriverWait(driver, 20).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[class="RxNS RxNS-mod-stretch RxNS-mod-variant-outline RxNS-mod-theme-base RxNS-mod-shape-default RxNS-mod-spacing-base RxNS-mod-size-small"]'))
+            )
+            accept_cookies_button.click()
+            is_cookies = False
+            time.sleep(3)  # Laisser un peu de temps après l'acceptation des cookies
     except Exception as e:
         print(f"Erreur lors de l'acceptation des cookies : {e}")
 
@@ -44,7 +44,8 @@ def find_price(driver):
         )
     price_box = driver.find_elements(By.CSS_SELECTOR, 'g.price-box')[0]
     price_text = price_box.find_element(By.CLASS_NAME, 'price').text
-    print(f"Prix : {extract_price(price_text)}€")
+    # print(f"Prix : {extract_price(price_text)}€")
+    return extract_price(price_text)
 
 def find_date(driver):
     # Récupérer la div de classe "day-label" qui est "selected"
@@ -52,66 +53,167 @@ def find_date(driver):
         EC.visibility_of_element_located((By.CSS_SELECTOR, 'div.day-label.selected'))
     )
     data_val = day_label.get_attribute('data-val')
-    print(f"Date : {data_val}")
+    # print(f"Date : {data_val}")
+    return data_val
 
+# Vérifier si une ville existe dans la table 'ville' et l'insérer si elle n'existe pas
+def get_or_create_ville(conn, nom_ville):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_ville FROM ville WHERE nom_ville = ?", (nom_ville,))
+    result = cursor.fetchone()
+    if result:
+        return result[0]  # Retourne l'id_ville si la ville existe déjà
 
+    # Insérer la nouvelle ville
+    cursor.execute("INSERT INTO ville (nom_ville, descriptif_ville) VALUES (?, ?)", (nom_ville, None))
+    conn.commit()
+    return cursor.lastrowid  # Retourne l'id_ville nouvellement créé
+
+# Vérifier si un aéroport existe dans la table 'aeroport' et l'insérer si nécessaire
+def get_or_create_aeroport(conn, nom_aeroport, code_iata, ville_name):
+    cursor = conn.cursor()
+
+    # Vérifier si l'aéroport existe déjà
+    cursor.execute("SELECT id_aeroport FROM aeroport WHERE code_iata = ?", (code_iata,))
+    result = cursor.fetchone()
+    if result:
+        return result[0]  # Retourne l'id_aeroport si l'aéroport existe déjà
+
+    # Sinon, obtenir l'id de la ville ou la créer si elle n'existe pas
+    id_ville = get_or_create_ville(conn, ville_name)
+
+    # Insérer l'aéroport
+    cursor.execute(
+        "INSERT INTO aeroport (id_ville, nom_aeroport, code_iata, descriptif_aeroport) VALUES (?, ?, ?, ?)",
+        (id_ville, nom_aeroport, code_iata, None)
+    )
+    conn.commit()
+    return cursor.lastrowid  # Retourne l'id_aeroport nouvellement créé
+
+# Insérer un vol dans la table 'vol' ou mettre à jour si les dates existent déjà
+def insert_vol(conn, date_debut, date_fin, prix, aeroport_depart, aeroport_destination):
+    cursor = conn.cursor()
+    
+    # Vérifier si un vol existe déjà avec les mêmes dates
+    cursor.execute(
+        "SELECT prix_vol FROM vol WHERE id_aeroport_depart = ? AND id_aeroport_destination = ? "
+        "AND date_aller = ? AND date_retour = ?",
+        (aeroport_depart, aeroport_destination, date_debut, date_fin)
+    )
+    
+    result = cursor.fetchone()
+    
+    if result:
+        # Si une entrée existe déjà, on met à jour le prix du vol
+        cursor.execute(
+            "UPDATE vol SET prix_vol = ? WHERE id_aeroport_depart = ? AND id_aeroport_destination = ? "
+            "AND date_aller = ? AND date_retour = ?",
+            (prix, aeroport_depart, aeroport_destination, date_debut, date_fin)
+        )
+    else:
+        # Insérer un nouveau vol si aucune entrée n'est trouvée
+        cursor.execute(
+            "INSERT INTO vol (id_aeroport_depart, id_aeroport_destination, prix_vol, lien_vol, date_aller, date_retour) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (aeroport_depart, aeroport_destination, prix, None, date_debut, date_fin)
+        )
+    
+    conn.commit()  # Confirmer la transaction
+
+def update_db(driver, conn, nb_jours_voyage, id_aeroport_depart, id_aeroport_destination):
+    prix = find_price(driver)
+    date_debut = find_date(driver)
+    date_debut_format = datetime.strptime(date_debut, "%Y-%m-%d")
+    date_fin_format = date_debut_format + timedelta(days=nb_jours_voyage)
+    print(date_debut_format.strftime("%Y-%m-%d"), 
+            date_fin_format.strftime("%Y-%m-%d"), 
+            prix, 
+            id_aeroport_depart, 
+            id_aeroport_destination)
+    insert_vol(conn, 
+            date_debut_format.strftime("%Y-%m-%d"), 
+            date_fin_format.strftime("%Y-%m-%d"), 
+            prix, 
+            id_aeroport_depart, 
+            id_aeroport_destination)
+        
 try:
-    # Ouvrir l'URL de Kayak
-    url = "https://www.kayak.fr/explore/LYS-AMS/20250101,20250131?tripdurationrange=8,8"
-    driver.get(url)
+    driver = start_browser() # Démarrer le navigateur
+    conn = sqlite3.connect('odyssee.db')  # Créer une connexion dans chaque thread
+    is_cookies = True
+    aeroports_depart = [
+                          ["Tous les aéroports de Paris", "PAR", "Paris"],
+                          ["Marseille-Provence", "MRS", "Marseille"],
+                          ["Lyon Saint-Exupéry", "LYS", "Lyon"],
+                          ["Nice Côte d'Azur", "NCE", "Nice"],
+                          ["Bordeaux Mérignac", "BOD", "Bordeaux"],
+                          ["Nantes Atlantique", "NTE", "Nantes"],
+                          ["Lille Lesquin", "LIL", "Lille"]
+                       ]
+    aeroports_destination = [
+                               ["Oslo Sandefjord", "TRF", "Oslo"],
+                               ["Amsterdam Schiphol", "AMS", "Amsterdam"],
+                               ["Tous les aéroports de Montréal", "YMQ", "Montréal"]
+                            ]
+    nb_jours_voyage_liste = [7, 10, 14]
 
-    accept_cookies(driver)
+    for nom_aeroport_destination, code_iata_destination, ville_aeroport_destination in aeroports_destination:
+        id_aeroport_destination = get_or_create_aeroport(conn, nom_aeroport_destination, code_iata_destination, ville_aeroport_destination)
+        print(nom_aeroport_destination)
 
-    # Attendre que le SVG avec la classe "graph-area" soit chargé
-    svg_graph_area = WebDriverWait(driver, 20).until(
-        EC.visibility_of_element_located((By.CSS_SELECTOR, 'svg.graph-area'))
-    )
+        for nom_aeroport_depart, code_iata_depart, ville_aeroport_depart in aeroports_depart:
+            id_aeroport_depart = get_or_create_aeroport(conn, nom_aeroport_depart, code_iata_depart, ville_aeroport_depart)
+            print(nom_aeroport_depart)
+            
+            for nb_jours_voyage in nb_jours_voyage_liste:
+                # Ouvrir l'URL de Kayak
+                url = (
+                    "https://www.kayak.fr/explore/"
+                    f"{code_iata_depart}-{code_iata_destination}/"
+                )
+                driver.get(url)
 
-    # Localiser la première balise <g class="emptyBar selected"> dans le SVG de classe "graph-area"
-    empty_bar_selected = svg_graph_area.find_element(By.CSS_SELECTOR, 'g.emptyBar.selected')
-    empty_bar_selected.click()
-    print("Clic début graphique")
+                accept_cookies(driver)
 
-    # Attendre que le bouton increase-duration soit visible
-    increase_duration_button = WebDriverWait(driver, 20).until(
-        EC.element_to_be_clickable((By.CLASS_NAME, 'increase-duration'))
-    )
-    time.sleep(3) 
-    # Cliquer sur le bouton increase-duration quatre fois
-    for i in range(4): # De 4 à 8
-        increase_duration_button.click()
-        print("Clic increase duration")
+                # Attendre que le SVG avec la classe "graph-area" soit chargé
+                svg_graph_area = WebDriverWait(driver, 20).until(
+                    EC.visibility_of_element_located((By.CSS_SELECTOR, 'svg.graph-area'))
+                )
 
-    find_date(driver)
-    find_price(driver)
+                # Localiser la première balise <g class="emptyBar selected"> dans le SVG de classe "graph-area"
+                empty_bar_selected = svg_graph_area.find_element(By.CSS_SELECTOR, 'g.emptyBar.selected')
+                empty_bar_selected.click()
 
-    counter_click = 1 
-    # Variable de compteur pour chaque boucle
-    while True:
-        try:                
-            svg_graph_area.find_elements(By.CSS_SELECTOR, 'g.bar.preselected')[0].click()
-            counter_click += 1
-            find_date(driver)
-            find_price(driver)
+                # Attendre que le bouton increase-duration soit visible
+                increase_duration_button = WebDriverWait(driver, 20).until(
+                    EC.element_to_be_clickable((By.CLASS_NAME, 'increase-duration'))
+                )
+                time.sleep(3) 
 
-            if counter_click == 14:
-                counter_click = 0
-                scroll_right_button = driver.find_element(By.CSS_SELECTOR, '.scroll-right')
-                scroll_right_button.click()
+                nb_click_necessaire = (nb_jours_voyage-4)+1
+                for i in range(nb_click_necessaire): # De 4 à 8
+                    increase_duration_button.click()
 
+                update_db(driver, conn, nb_jours_voyage, id_aeroport_depart, id_aeroport_destination)
 
-        except Exception as e:
-            scroll_right_button = driver.find_element(By.CSS_SELECTOR, '.scroll-right')
-            scroll_right_button.click()
-            scroll_right_button.click()
-            print("Défilement vers la droite effectué. [Exception]")
-            counter_click = 0
-            # find_date(driver)
-            # find_price(driver)
+                counter_click = 1 
+                while True:
+                    try:                
+                        svg_graph_area.find_elements(By.CSS_SELECTOR, 'g.bar.preselected')[0].click()
+                        counter_click += 1
+                        
+                        update_db(driver, conn, nb_jours_voyage, id_aeroport_depart, id_aeroport_destination)
+
+                        if counter_click == 14:
+                            counter_click = 0
+                            driver.find_element(By.CSS_SELECTOR, '.scroll-right').click()
+
+                    except Exception as e:
+                        print("Fin du graphique")
+                        break
 
 except Exception as e:
     print(f"Erreur lors du clic : {e}")
-
 finally:
-    # Fermer le navigateur
-    driver.quit()
+    driver.quit() # Fermer le navigateur
+    conn.close()  # Fermer la connexion à la base de données
