@@ -31,10 +31,11 @@ def accept_cookies(driver):
         print(f"Erreur lors de l'acceptation des cookies : {e}")
 
 def extract_price(text):
-    # Utiliser une expression régulière pour trouver la première séquence de chiffres dans le texte
-    match = re.search(r'\d+', text)
+    # Expression régulière pour capturer un nombre qui peut contenir des espaces insécables ou des espaces normaux
+    match = re.search(r'\d[\d\s\u202f\u00a0]*', text)
     if match:
-        return int(match.group())  # Convertir en entier si on a trouvé un nombre
+        # Supprime tous les types d'espaces et convertir en entier
+        return int(match.group().replace(' ', '').replace('\u202f', '').replace('\u00a0', ''))
     else:
         raise ValueError("Aucun prix trouvé dans le texte fourni")
     
@@ -151,7 +152,13 @@ try:
                           ["Lille Lesquin", "LIL", "Lille"]
                        ]
     aeroports_destination = [
-                               ["Oslo Sandefjord", "TRF", "Oslo"],
+                               ["Réunion Roland Garros", "RUN", "Saint Denis"],
+                               ["Le Caire", "CAI", "Le Caire"],
+                               ["Tous les aéroports de Bangkok", "BKK", "Bangkok"],
+                               ["Tous les aéroports de Londres", "LON", "Londres"],
+                               ["Dublin", "DUB", "Dublin"],
+                               ["Mykonos", "JMK", "Mykonos"]
+                               ["Tous les aéroports d'Oslo", "OSL", "Oslo"],
                                ["Amsterdam Schiphol", "AMS", "Amsterdam"],
                                ["Tous les aéroports de Montréal", "YMQ", "Montréal"]
                             ]
@@ -159,58 +166,61 @@ try:
 
     for nom_aeroport_destination, code_iata_destination, ville_aeroport_destination in aeroports_destination:
         id_aeroport_destination = get_or_create_aeroport(conn, nom_aeroport_destination, code_iata_destination, ville_aeroport_destination)
-        print(nom_aeroport_destination)
 
         for nom_aeroport_depart, code_iata_depart, ville_aeroport_depart in aeroports_depart:
             id_aeroport_depart = get_or_create_aeroport(conn, nom_aeroport_depart, code_iata_depart, ville_aeroport_depart)
-            print(nom_aeroport_depart)
-            
-            for nb_jours_voyage in nb_jours_voyage_liste:
-                # Ouvrir l'URL de Kayak
-                url = (
-                    "https://www.kayak.fr/explore/"
-                    f"{code_iata_depart}-{code_iata_destination}/"
-                )
-                driver.get(url)
+            print(f"{nom_aeroport_depart} <-> {nom_aeroport_destination}")
 
-                accept_cookies(driver)
+            try:
+                for nb_jours_voyage in nb_jours_voyage_liste:
+                    # Ouvrir l'URL de Kayak
+                    url = (
+                        "https://www.kayak.fr/explore/"
+                        f"{code_iata_depart}-{code_iata_destination}/"
+                    )
+                    driver.get(url)
 
-                # Attendre que le SVG avec la classe "graph-area" soit chargé
-                svg_graph_area = WebDriverWait(driver, 20).until(
-                    EC.visibility_of_element_located((By.CSS_SELECTOR, 'svg.graph-area'))
-                )
+                    accept_cookies(driver)
 
-                # Localiser la première balise <g class="emptyBar selected"> dans le SVG de classe "graph-area"
-                empty_bar_selected = svg_graph_area.find_element(By.CSS_SELECTOR, 'g.emptyBar.selected')
-                empty_bar_selected.click()
+                    # Attendre que le SVG avec la classe "graph-area" soit chargé
+                    svg_graph_area = WebDriverWait(driver, 20).until(
+                        EC.visibility_of_element_located((By.CSS_SELECTOR, 'svg.graph-area'))
+                    )
 
-                # Attendre que le bouton increase-duration soit visible
-                increase_duration_button = WebDriverWait(driver, 20).until(
-                    EC.element_to_be_clickable((By.CLASS_NAME, 'increase-duration'))
-                )
-                time.sleep(3) 
+                    # Localiser la première balise <g class="emptyBar selected"> dans le SVG de classe "graph-area"
+                    empty_bar_selected = svg_graph_area.find_element(By.CSS_SELECTOR, 'g.emptyBar.selected')
+                    empty_bar_selected.click()
 
-                nb_click_necessaire = (nb_jours_voyage-4)+1
-                for i in range(nb_click_necessaire): # De 4 à 8
-                    increase_duration_button.click()
+                    # Attendre que le bouton increase-duration soit visible
+                    increase_duration_button = WebDriverWait(driver, 20).until(
+                        EC.element_to_be_clickable((By.CLASS_NAME, 'increase-duration'))
+                    )
+                    time.sleep(3) 
 
-                update_db(driver, conn, nb_jours_voyage, id_aeroport_depart, id_aeroport_destination)
+                    nb_click_necessaire = (nb_jours_voyage-4)+1
+                    for i in range(nb_click_necessaire): # De 4 à 8
+                        increase_duration_button.click()
 
-                counter_click = 1 
-                while True:
-                    try:                
-                        svg_graph_area.find_elements(By.CSS_SELECTOR, 'g.bar.preselected')[0].click()
-                        counter_click += 1
-                        
-                        update_db(driver, conn, nb_jours_voyage, id_aeroport_depart, id_aeroport_destination)
+                    update_db(driver, conn, nb_jours_voyage, id_aeroport_depart, id_aeroport_destination)
 
-                        if counter_click == 14:
-                            counter_click = 0
-                            driver.find_element(By.CSS_SELECTOR, '.scroll-right').click()
+                    counter_click = 1 
+                    while True:
+                        try:                
+                            svg_graph_area.find_elements(By.CSS_SELECTOR, 'g.bar.preselected')[0].click()
+                            counter_click += 1
+                            
+                            update_db(driver, conn, nb_jours_voyage, id_aeroport_depart, id_aeroport_destination)
 
-                    except Exception as e:
-                        print("Fin du graphique")
-                        break
+                            if counter_click == 14:
+                                counter_click = 0
+                                driver.find_element(By.CSS_SELECTOR, '.scroll-right').click()
+
+                        except Exception as e:
+                            print("Fin du graphique")
+                            break
+            except Exception as e:
+                print(f"Graphique des prix non disponible")
+                continue
 
 except Exception as e:
     print(f"Erreur lors du clic : {e}")
