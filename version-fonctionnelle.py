@@ -152,12 +152,15 @@ try:
                           ["Lille Lesquin", "LIL", "Lille"]
                        ]
     aeroports_destination = [
+                               ["Lisbonne Humberto Delgado", "LIS", "Lisbonne"],
+                               ["Tous les aéroports de Venise", "VCE", "Venise"],
+                               ["Split", "SPU", "Split"],
                                ["Réunion Roland Garros", "RUN", "Saint Denis"],
                                ["Le Caire", "CAI", "Le Caire"],
                                ["Tous les aéroports de Bangkok", "BKK", "Bangkok"],
                                ["Tous les aéroports de Londres", "LON", "Londres"],
                                ["Dublin", "DUB", "Dublin"],
-                               ["Mykonos", "JMK", "Mykonos"]
+                               ["Mykonos", "JMK", "Mykonos"],
                                ["Tous les aéroports d'Oslo", "OSL", "Oslo"],
                                ["Amsterdam Schiphol", "AMS", "Amsterdam"],
                                ["Tous les aéroports de Montréal", "YMQ", "Montréal"]
