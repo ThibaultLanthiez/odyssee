@@ -210,8 +210,10 @@ try:
 
                     counter_click = 1 
                     while True:
-                        try:                
-                            svg_graph_area.find_elements(By.CSS_SELECTOR, 'g.bar.preselected')[0].click()
+                        try: 
+                            WebDriverWait(svg_graph_area, 20).until(
+                                EC.visibility_of_element_located((By.CSS_SELECTOR, 'g.bar.preselected'))
+                            ).click()        
                             counter_click += 1
                             
                             update_db(driver, conn, nb_jours_voyage, id_aeroport_depart, id_aeroport_destination)
@@ -230,5 +232,5 @@ try:
 except Exception as e:
     print(f"Erreur lors du clic : {e}")
 finally:
-    driver.quit() # Fermer le navigateur
-    conn.close()  # Fermer la connexion à la base de données
+    driver.quit() # Fermer navigateur
+    conn.close()  # Fermer connexion bdd

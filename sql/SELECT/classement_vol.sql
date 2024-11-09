@@ -32,6 +32,7 @@ ORDER BY
 11|Bordeaux Mérignac|BOD|
 12|Nantes Atlantique|NTE|
 13|Lille Lesquin|LIL|
+25|Genève-Cointrin|GVA|
 
 8|Oslo Sandefjord|TRF|
 6|Amsterdam Schiphol|AMS|
@@ -45,6 +46,7 @@ ORDER BY
 21|Lisbonne Humberto Delgado|LIS|
 22|Tous les aéroports de Venise|VCE|
 23|Split|SPU|
+24|Casablanca Mohammed V|CMN|
 */
 
 163
