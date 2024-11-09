@@ -12,8 +12,8 @@ SELECT
 FROM
     vol
 WHERE
-    id_aeroport_depart = 13
-    AND id_aeroport_destination = 16
+    id_aeroport_depart = 25
+    AND id_aeroport_destination = 21
     AND (julianday(date_retour) - julianday(date_aller)) IN (7, 10, 14)  -- Filtrer pour les voyages de 7, 10 ou 14 jours
     AND date_aller > date('2024-11-02')
 GROUP BY
@@ -28,11 +28,11 @@ ORDER BY
 9|Tous les aéroports de Paris|PAR|     
 7|Marseille-Provence|MRS|
 2|Lyon|LYS|
+25|Genève-Cointrin|GVA|
 10|Nice Côte d'Azur|NCE|
 11|Bordeaux Mérignac|BOD|
 12|Nantes Atlantique|NTE|
 13|Lille Lesquin|LIL|
-25|Genève-Cointrin|GVA|
 
 8|Oslo Sandefjord|TRF|
 6|Amsterdam Schiphol|AMS|
@@ -49,12 +49,12 @@ ORDER BY
 24|Casablanca Mohammed V|CMN|
 */
 
-163
-155
-184
-179
-171
-194
-186
-198
-268
+60
+67
+73
+76
+76
+90
+74
+87
+150
