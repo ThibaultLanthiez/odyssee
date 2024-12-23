@@ -18,7 +18,8 @@ departure_airports = [
     (10, "Nice Côte d'Azur"),
     (11, "Bordeaux Mérignac"),
     (12, "Nantes Atlantique"),
-    (13, "Lille Lesquin")
+    (13, "Lille Lesquin"),
+    (43, "Toulouse Blagnac")
 ]
 
 # Convertir la liste des aéroports de départ en DataFrame pour faciliter la gestion
@@ -124,6 +125,10 @@ if selected_departure_airport and selected_destination_airport and selected_mont
         # Afficher le premier tableau avec toutes les colonnes, y compris les dates
         st.write("### Résultats de la requête SQL")
         st.dataframe(data)
+
+        # Calcul de la moyenne de la colonne `prix_minimum`
+        moyenne_prix_minimum = round(data['prix_minimum'].mean())
+        st.write(f"**Moyenne du prix minimum :** {moyenne_prix_minimum} €")
 
         # Créer un tableau formaté pour afficher les prix minimums par durée de voyage
         st.write("### Tableau des prix minimums par durée de voyage")

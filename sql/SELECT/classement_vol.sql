@@ -12,8 +12,8 @@ SELECT
 FROM
     vol
 WHERE
-    id_aeroport_depart = 25
-    AND id_aeroport_destination = 21
+    id_aeroport_depart = 9
+    AND id_aeroport_destination = 14
     AND (julianday(date_retour) - julianday(date_aller)) IN (7, 10, 14)  -- Filtrer pour les voyages de 7, 10 ou 14 jours
     AND date_aller > date('2024-11-02')
 GROUP BY
