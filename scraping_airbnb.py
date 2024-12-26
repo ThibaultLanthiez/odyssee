@@ -41,19 +41,19 @@ def get_or_create_logement(id_ville, lien_logement, nb_pers_max):
     conn.commit()
     return new_id_logement
 
-def insert_or_update_dispo_logement(id_logement, date_premiere_nuit, nb_nuit, prix_total):
-    cursor.execute("SELECT 1 FROM dispo_logement WHERE id_logement = ? AND date_premiere_nuit = ? AND nb_nuit = ?",
-                   (id_logement, date_premiere_nuit, nb_nuit))
+def insert_or_update_dispo_logement(id_logement, date_premiere_nuit, nb_nuit, prix_total, nb_pers):
+    cursor.execute("SELECT 1 FROM dispo_logement WHERE id_logement = ? AND date_premiere_nuit = ? AND nb_nuit = ? AND nb_pers = ?",
+                   (id_logement, date_premiere_nuit, nb_nuit, nb_pers))
     exists = cursor.fetchone()
     if exists:
         cursor.execute("""UPDATE dispo_logement 
                           SET prix_total = ? 
-                          WHERE id_logement = ? AND date_premiere_nuit = ? AND nb_nuit = ?""",
-                       (prix_total, id_logement, date_premiere_nuit, nb_nuit))
+                          WHERE id_logement = ? AND date_premiere_nuit = ? AND nb_nuit = ? AND nb_pers = ?""",
+                       (prix_total, id_logement, date_premiere_nuit, nb_nuit, nb_pers))
     else:
-        cursor.execute("""INSERT INTO dispo_logement (id_logement, date_premiere_nuit, nb_nuit, prix_total) 
-                          VALUES (?, ?, ?, ?)""",
-                       (id_logement, date_premiere_nuit, nb_nuit, prix_total))
+        cursor.execute("""INSERT INTO dispo_logement (id_logement, date_premiere_nuit, nb_nuit, prix_total, nb_pers) 
+                          VALUES (?, ?, ?, ?, ?)""",
+                       (id_logement, date_premiere_nuit, nb_nuit, prix_total, nb_pers))
     conn.commit()
 
 def delete_dispo_logement(id_logement, date_premiere_nuit):
@@ -95,7 +95,7 @@ def fetch_price():
     """Extraire et afficher le prix total ou signaler l'indisponibilité."""
     try:
         time.sleep(3)
-        price_element = WebDriverWait(driver, 15).until(
+        price_element = WebDriverWait(driver, 5).until(
                     EC.visibility_of_element_located((By.CSS_SELECTOR, 'div[data-section-id="BOOK_IT_SIDEBAR"]'))
                 )        
         total_price = price_element.text.split('Total')[-1].strip()
@@ -108,27 +108,63 @@ def main():
 
     id_ville = get_or_create_ville("Rome")
     lien_logement = "https://www.airbnb.fr/rooms/1081988723303637094"
-    nb_pers = 2
-    id_logement = get_or_create_logement(id_ville, lien_logement, nb_pers)
+    print(f"Logement : {lien_logement}")
+    nb_pers_max = 2
+    id_logement = get_or_create_logement(id_ville, lien_logement, nb_pers_max)
 
     nb_days = 7
     date_ranges = generate_date_ranges(nb_days)
 
     for check_in, check_out in date_ranges:
-        url = f"{lien_logement}?adults={nb_pers}&check_in={check_in}&check_out={check_out}"
-        driver.get(url)
 
-        if date_ranges.index((check_in, check_out)) == 0:
-            handle_initial_popups()
+        for nb_pers in range(1, nb_pers_max+1):
+            if nb_pers == 1:
+                print(f"\nNb pers : {nb_pers}")
 
-        total_price = fetch_price()
-        if total_price:
-            insert_or_update_dispo_logement(id_logement, check_in, nb_days, total_price)
-            print(f"Prix pour les dates {check_in} au {check_out} : {total_price}")
-        else:
-            delete_dispo_logement(id_logement, check_in)
-            print(f"Aucun prix disponible pour les dates {check_in} au {check_out}.")
+                url = f"{lien_logement}?adults={nb_pers}&check_in={check_in}&check_out={check_out}"
+                driver.get(url)
 
+                if date_ranges.index((check_in, check_out)) == 0:
+                    handle_initial_popups()
+
+                total_price = fetch_price()
+                if total_price:
+                    insert_or_update_dispo_logement(id_logement, check_in, nb_days, total_price, nb_pers)
+                    print(f"Prix pour les dates {check_in} au {check_out} : {total_price}€")
+                else:
+                    delete_dispo_logement(id_logement, check_in)
+                    print(f"Aucun prix disponible pour les dates {check_in} au {check_out}.")
+
+            else:
+                print(f"Nb pers : {nb_pers}")
+
+                guest_picker_trigger = WebDriverWait(driver, 20).until(
+                    EC.element_to_be_clickable((By.ID, "GuestPicker-book_it-trigger"))
+                )            
+                # Cliquer sur la div
+                guest_picker_trigger.click()
+
+                container = WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div[aria-labelledby="GuestPicker-book_it-form-adults"]'))
+                )
+                # Trouver tous les boutons à l'intérieur de cette div
+                buttons = container.find_elements(By.TAG_NAME, 'button')
+                # Vérifier qu'il y a au moins un bouton
+                if buttons:
+                    # Cliquer sur le dernier bouton
+                    buttons[-1].click()
+                    print("Dernier bouton cliqué avec succès.")
+                else:
+                    print("Aucun bouton trouvé dans la div spécifiée.")
+
+                total_price = fetch_price()
+                if total_price:
+                    insert_or_update_dispo_logement(id_logement, check_in, nb_days, total_price, nb_pers)
+                    print(f"Prix pour les dates {check_in} au {check_out} : {total_price}€")
+                else:
+                    delete_dispo_logement(id_logement, check_in)
+                    print(f"Aucun prix disponible pour les dates {check_in} au {check_out}.")         
+            
     driver.quit()
 
 if __name__ == "__main__":
